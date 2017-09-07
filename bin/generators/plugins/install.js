@@ -98,7 +98,9 @@ module.exports = class extends eg.Generator {
     const systemConfig = config.systemConfig;
     const name = this.pluginManifest.name || this.pluginName;
 
-    const previousPluginOptions = systemConfig[name] || {};
+    const previousPluginOptions =
+      systemConfig.plugins && systemConfig.plugins[name] ?
+        systemConfig.plugins[name] : {};
 
     const pluginQuestions = keys.map(key => {
       const schema = optionsMeta[key];
@@ -177,67 +179,111 @@ module.exports = class extends eg.Generator {
   }
 
   writing () {
+    // NOTE (kevinswiber): Updating YAML while maintaining presentation
+    // style is not easy.  We're using the YAWN library here, which has
+    // a decent approach given the current state of available YAML parsers,
+    // but it's far from perfect.  Take a look at existing YAWN issues
+    // before making any optimizations.  If any section of this code looks
+    // ugly or inefficient, it may be that way for a reason.
+    //
+    // ¯\_(ツ)_/¯
+    //
+    // https://github.com/mohsen1/yawn-yaml/issues
+ 
     const name = this.pluginManifest.name || this.pluginName;
     const policyNames = this.pluginManifest.policies || [];
 
     const config = require('../../../lib/config');
 
     if (this.enablePlugin) {
+      const isJSON = config.systemConfigPath.toLowerCase().endsWith('.json');
+      const isYAML = !isJSON;
+
       const systemConfig = fs.readFileSync(config.systemConfigPath);
 
-      let yawn = new YAWN(systemConfig.toString());
-      let obj = Object.assign({}, yawn.json);
+      // YAML-specific variables
+      let yawn = null;
+      let oldLength = null;
 
-      let oldLength = obj.plugins ? null : yawn.yaml.length;
+      let obj = null;
 
-      let plugins = obj.plugins || [];
+      if (isYAML) {
+        yawn = new YAWN(systemConfig.toString());
+        obj = Object.assign({}, yawn.json);
 
-      if (plugins.indexOf(name) === -1) {
-        plugins.push(name);
+        oldLength = obj.plugins ? null : yawn.yaml.length;
+      } else {
+        obj = JSON.parse(systemConfig.toString());
       }
 
-      obj.plugins = plugins;
-      yawn.json = obj;
+      let plugins = obj.plugins || {};
 
-      if (oldLength) {
-        // add a line break before new plugins array
-        yawn.yaml = yawn.yaml.substr(0, oldLength) + os.EOL +
-          yawn.yaml.substr(oldLength);
-
-        obj = yawn.json;
+      if (!plugins.hasOwnProperty(name)) {
+        plugins[name] = null;
       }
 
-      oldLength = obj[name] ? null : yawn.yaml.length;
-
-      obj = Object.assign({}, yawn.json);
       if (name !== this.pluginName) {
-        obj[name] = { package: this.pluginName };
+        plugins[name] = plugins[name] || {};
+        plugins[name].package = this.pluginName;
+        obj.plugins = plugins;
+
+        if (isYAML) {
+          obj = this._updateYAML(obj, yawn);
+        }
       }
 
       if (this.pluginOptions) {
-        obj[name] = Object.assign(obj[name] || {}, this.pluginOptions);
+        plugins[name] = plugins[name] || {};
+        const self = this;
+        const keys = Object.keys(self.pluginOptions);
+
+        // YAWN needs to be updated by smallest atomic unit
+        keys.forEach(key => {
+          plugins[name][key] = self.pluginOptions[key];
+          obj.plugins = plugins;
+
+          if (isYAML) {
+            obj = this._updateYAML(obj, yawn);
+            plugins = obj.plugins;
+          }
+        });
       }
 
-      yawn.json = obj;
-
-      if (oldLength) {
-        // add a line break before new plugin options object
+      if (isYAML && oldLength) {
+        // add a line break before new plugins mapping
         yawn.yaml = yawn.yaml.substr(0, oldLength) + os.EOL +
           yawn.yaml.substr(oldLength);
       }
 
-      fs.writeFileSync(config.systemConfigPath, yawn.yaml.trim());
+      const output = isYAML ? yawn.yaml.trim() : JSON.stringify(obj, null, 2);
+
+      fs.writeFileSync(config.systemConfigPath, output);
     }
 
     if (this.addPoliciesToWhitelist) {
+      const isJSON = config.gatewayConfigPath.toLowerCase().endsWith('.json');
+      const isYAML = !isJSON;
+
       const gatewayConfig = fs.readFileSync(config.gatewayConfigPath);
 
-      let yawn = new YAWN(gatewayConfig.toString());
-      let obj = Object.assign({}, yawn.json);
+      // YAML-specific variable
+      let yawn = null;
+
+      let obj = null;
+
+      if (isYAML) {
+        yawn = new YAWN(gatewayConfig.toString());
+        obj = Object.assign({}, yawn.json);
+      } else {
+        obj = JSON.parse(gatewayConfig.toString());
+      }
 
       let policies = obj.policies || [];
 
-      policyNames.reverse().forEach(policy => {
+      // YAWN reverses arrays
+      const correctedPolicyNames = isYAML ? policyNames.reverse() : policyNames;
+      
+      correctedPolicyNames.forEach(policy => {
         if (policies.indexOf(policy) === -1) {
           policies.push(policy);
         }
@@ -245,9 +291,19 @@ module.exports = class extends eg.Generator {
 
       obj.policies = policies;
 
-      yawn.json = obj;
-      fs.writeFileSync(config.gatewayConfigPath, yawn.yaml.trim());
+      if (isYAML) {
+        yawn.json = obj;
+      }
+
+      const output = isYAML ? yawn.yaml.trim() : JSON.stringify(obj, null, 2);
+
+      fs.writeFileSync(config.gatewayConfigPath, output);
     }
+  }
+
+  _updateYAML(obj, yawn) {
+    yawn.json = obj;
+    return yawn.json;
   }
 
   end () {
