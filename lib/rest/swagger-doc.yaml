@@ -445,6 +445,61 @@ paths:
                 $ref: '#/definitions/Scope'
         '404':
           $ref: '#/responses/NotFound'
+  /plugins:
+    get:
+      tags:
+        - Plugins
+      summary: Returns a list of installed plugins
+      responses:
+        '200':
+          description: Plugins
+          schema:
+            $ref: '#/definitions/Plugins'
+    post:
+      tags:
+        - Plugins 
+      summary: Install Plugin 
+      parameters:
+        - name: package
+          in: body
+          schema:
+            type: string
+            example: 'eg-example-plugin'
+      responses:
+        '201':
+          description: Created
+          schema:
+            $ref: '#/definitions/Plugin'
+  '/plugins/{pluginName}':
+    get:
+      tags:
+        - Plugins
+      summary: Return a single plugin
+      responses:
+        '200':
+          description: Plugin
+          schema:
+            $ref: '#/definitions/Plugin'
+    put:
+      tags:
+        - Plugins
+      summary: Update a single plugin
+      parameters:
+        - name: pluginName
+          in: path
+          required: true
+          description: plugin name
+          type: string
+        - name: data
+          in: body
+          schema:
+            $ref: '#/definitions/Plugin'
+      responses:
+        '200':
+          description: Plugin
+          schema:
+            $ref: '#/definitions/Plugin'
+
 definitions:
   CreateUserRequest:
     required:
@@ -722,6 +777,57 @@ definitions:
       nextKey:
         type: integer
         description: 'Reserved for future needs, Always 0'
+  Plugins:
+    properties:
+      plugins:
+        description: Array of Plugins
+        type: array
+        items:
+          $ref: '#/definitions/Plugin'
+      nextKey:
+        type: integer
+        description: 'Reserved for future needs, Always 0'
+  Plugin:
+    required:
+      - name
+    properties:
+      name:
+        type: string
+      description:
+        type: string
+      version:
+        type: string
+      disabled:
+        type: boolean
+        default: false
+      configured:
+        type: boolean
+        default: false
+      options:
+        type: array
+        items:
+          $ref: '#/definitions/PluginOption'
+    example:
+      name: 'custom-plugin'
+      description: An example plugin
+      version: 1.1.0
+      disabled: false
+      options:
+        - name: debug
+          schema: 
+            type: string
+            title: 'Debug'
+            description: 'Enable debugging'
+          value: true
+  PluginOption:
+    properties:
+      name:
+        type: string
+      schema:
+        type: object
+      value:
+        type: string
+
 responses:
   StatusUpdateResponse:
     description: Entity status state
