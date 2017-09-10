@@ -5,11 +5,10 @@ module.exports = class extends eg.Generator {
   constructor (args, opts) {
     super(args, opts);
 
-    this.pluginName = null;
-    this.pluginManifest = null;
+    this.installer = PluginInstaller.create();
+
     this.pluginOptions = null;
 
-    this.installer = PluginInstaller.create();
     this.enablePlugin = false;
     this.addPoliciesToWhitelist = false;
 
