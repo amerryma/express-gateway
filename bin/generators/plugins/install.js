@@ -41,7 +41,7 @@ module.exports = class extends eg.Generator {
       return {
         type: 'input',
         name: `pluginOption${key}`,
-        message: `Set value for ${key} [${schema.title || key}]`,
+        message: `Set value for ${key}:`,
         default: previousPluginOptions[key],
         validate: input => {
           const type = schema.type;
